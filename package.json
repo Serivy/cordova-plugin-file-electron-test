@@ -1,0 +1,37 @@
+{
+  "name": "io.cordova.hellocordova",
+  "displayName": "HelloCordova",
+  "version": "1.0.0",
+  "description": "A sample Apache Cordova application that responds to the deviceready event.",
+  "main": "index.js",
+  "scripts": {
+    "start2": "cordova run electron --nobuild",
+    "start": "npx nodemon --watch plugins/cordova-plugin-file --watch www --exec \"cordova run electron --nobuild\" --ext js",
+    "clean": "npx cordova plugin remove ../cordova-plugin-file",
+    "addpluginlink": "npx cordova plugin add ../cordova-plugin-file --link",
+    "test": "npx nodemon --watch www --exec \"cordova prepare electron && cordova run electron --nobuild\" --ext html,css,js"
+  },
+  "keywords": [
+    "ecosystem:cordova"
+  ],
+  "author": "Apache Cordova Team",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "cordova": "^11.0.0"
+  },
+  "devDependencies": {
+    "cordova-browser": "^6.0.0",
+    "cordova-electron": "^3.1.0",
+    "cordova-plugin-file": "file:../cordova-plugin-file",
+    "nodemon": "^2.0.18"
+  },
+  "cordova": {
+    "platforms": [
+      "browser",
+      "electron"
+    ],
+    "plugins": {
+      "cordova-plugin-file": {}
+    }
+  }
+}
