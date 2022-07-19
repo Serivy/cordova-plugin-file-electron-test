@@ -1,34 +1,43 @@
 var cordovaReady = new Promise((resolve, reject) => { document.addEventListener('deviceready', resolve, false); });
 
-const testDirName = "testDirectory";
+const testDirName = "electron/testDirectory";
+
+/** @type {DirectoryEntry} */
 let testDir;
 
 describe("Simple", function() {
-
   beforeAll(async function() {
     await cordovaReady;
 
     // Clean out all files.
     // Tested: requestAllPaths
-    let fs = await new Promise((resolve, reject) => { window.requestFileSystem(window.TEMPORARY, 5 * 1024 * 1024, (fs) => { resolve(fs); } )});
+    let fs = await new Promise((resolve, reject) => { window.requestFileSystem(window.PERSISTENT, 5 * 1024 * 1024, (fs) => { resolve(fs); } )});
     let dir = fs.root;
-    let entries = await new Promise((resolve, reject) => { dir.createReader().readEntries(resolve, reject); });
-    for (var file of entries) {
-      // if (file.isFile) {
-      //   let entry = await new Promise((resolve, reject) => dir.getFile(file.name, { create: false, exclusive: false }, resolve, reject));
-      //   await new Promise((resolve, reject) => { entry.remove(resolve, reject); });
-      //   console.log("Cleaned up " + file.fullPath);
-      // }
+    // let entries = await new Promise((resolve, reject) => { dir.createReader().readEntries(resolve, reject); });
+    // for (var file of entries) {
+    //   // if (file.isFile) {
+    //   //   let entry = await new Promise((resolve, reject) => dir.getFile(file.name, { create: false, exclusive: false }, resolve, reject));
+    //   //   await new Promise((resolve, reject) => { entry.remove(resolve, reject); });
+    //   //   console.log("Cleaned up " + file.fullPath);
+    //   // }
 
-      if (file.isDirectory && file.name === testDir) {
-        let entry = await new Promise((resolve, reject) => dir.getDirectory(file.name, { create: false, exclusive: false }, resolve, reject));
-        await new Promise((resolve, reject) => { entry.remove(resolve, reject); });
-        console.log("Cleaned up " + file.fullPath);
-      }
+    //   if (file.isDirectory && file.name === testDir) {
+    //     let entry = await new Promise((resolve, reject) => dir.getDirectory(file.name, { create: false, exclusive: false }, resolve, reject));
+    //     // https://www.w3.org/TR/2011/WD-file-system-api-20110419/#widl-Entry-remove
+    //     await new Promise((resolve, reject) => { entry.remove(resolve, reject); });
+    //     console.log("Cleaned up " + file.fullPath);
+    //   }
+    // }
+
+    try {
+      // Remove existing.
+      testDir = await new Promise((resolve, reject) => { fs.root.getDirectory(testDirName, { create: false, exclusive: false }, resolve, reject) });
+      console.log("Cleaning up old testing directory" + testDir.fullPath);
+      await recursiveRemove(testDir);
+    } finally {
+      testDir = await new Promise((resolve, reject) => { fs.root.getDirectory(testDirName, { create: true, exclusive: false }, resolve, reject) });
     }
-
-    testDir = await new Promise((resolve, reject) => { fs.root.getDirectory(testDirName, { create: true, exclusive: false }, resolve, reject) });
-
+    console.log("Testing dir" + testDir.fullPath);
 
     // await new Promise((resolve, reject) => { setTimeout(resolve, 3000); });
   });
@@ -78,14 +87,19 @@ describe("Simple", function() {
     let file = await new Promise((resolve, reject) => { fileEntry.file(resolve, reject); });
     let resultText = await new Promise((resolve, reject) => { let reader = new FileReader(); reader.onloadend = function() { resolve(this.result); }; reader.readAsText(file); });
     expect(resultText).toBe('contents');
+
+    // Tested:readEntries
+    /** @type {Entry[]} */
+    let entries = await new Promise((resolve, reject) => { dir.createReader().readEntries(resolve, reject); });
+    expect(entries.map(o => o.name).indexOf("filerenamed-copied.txt")).toBeGreaterThan(-1);
+    expect(entries.map(o => o.name).indexOf("filerenamed.txt")).toBeGreaterThan(-1);
+    expect(entries.map(o => o.name).indexOf("file.txt")).toBe(-1);
   });
 
 
-// : requestAllPathsHandler,
 // getDirectory: getDirectoryHandler,
 // removeRecursively: removeRecursively,
 // getFile: getFileHandler,
-// readEntries: readEntriesHandler,
 // getFileMetadata: getFileMetadata,
 // setMetadata: setMetadata,
 // remove: removeHandler,
@@ -110,6 +124,21 @@ const writeFile = async function(filename, contents) {
   await new Promise((resolve, reject) => { writer.onwriteend = resolve; writer.onerror = reject; writer.write(data); });
 }
 
+/**
+ * 
+ * @param {DirectoryEntry} folderEntry 
+ */
+const recursiveRemove = async (folderEntry) => {
+/** @type {Entry[]} */
+  let entries = await new Promise((resolve, reject) => { folderEntry.createReader().readEntries(resolve, reject); });
+  for (var entry of entries) {
+    if (entry.isDirectory) {
+      await recursiveRemove(entry);
+    }
+    await new Promise((resolve, reject) => { entry.remove(resolve, reject); });
+    // await new Promise((resolve, reject) => { setTimeout(resolve, 1000); })
+  }
+}
 /***********************************************************************
 // For extra logging, open cdv-electron-preload.js
 contextBridge.exposeInMainWorld('_cdvElectronIpc', {

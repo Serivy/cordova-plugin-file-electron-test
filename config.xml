@@ -8,4 +8,6 @@
     <content src="index.html" />
     <allow-intent href="http://*/*" />
     <allow-intent href="https://*/*" />
+    <hook src="before_plugin_install.js" type="before_plugin_install" />
+    <hook src="after_prepare.js" type="after_prepare" />
 </widget>
