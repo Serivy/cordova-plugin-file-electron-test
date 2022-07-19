@@ -11,8 +11,8 @@ describe("Simple", function() {
 
     // Clean out all files.
     // Tested: requestAllPaths
+    // Tested: requestFileSystem
     let fs = await new Promise((resolve, reject) => { window.requestFileSystem(window.PERSISTENT, 5 * 1024 * 1024, (fs) => { resolve(fs); } )});
-    let dir = fs.root;
     // let entries = await new Promise((resolve, reject) => { dir.createReader().readEntries(resolve, reject); });
     // for (var file of entries) {
     //   // if (file.isFile) {
@@ -33,7 +33,7 @@ describe("Simple", function() {
       // Remove existing.
       testDir = await new Promise((resolve, reject) => { fs.root.getDirectory(testDirName, { create: false, exclusive: false }, resolve, reject) });
       console.log("Cleaning up old testing directory" + testDir.fullPath);
-      await recursiveRemove(testDir);
+      await new Promise((resolve, reject) => { testDir.removeRecursively(resolve, reject); });
     } finally {
       testDir = await new Promise((resolve, reject) => { fs.root.getDirectory(testDirName, { create: true, exclusive: false }, resolve, reject) });
     }
@@ -43,27 +43,31 @@ describe("Simple", function() {
   });
 
   // https://cordova.apache.org/docs/en/11.x/reference/cordova-plugin-file/index.html
-  xit("write and read newTempFile.txt in app data", async function() {
+  it("write and read newTempFile.txt in app data", async function() {
     const filename = "newTempFile.txt";
-    let fs = await new Promise((resolve, reject) => { window.requestFileSystem(window.TEMPORARY, 5 * 1024 * 1024, (fs) => { resolve(fs); } )});
-    expect(fs.name).toBe(`C:\\dev\\cordova-electron-filesystem\\platforms\\electron\\`);
-    let fileEntry = await new Promise((resolve, reject) => { fs.root.getFile(filename, {create: true, exclusive: false}, resolve, reject) });
+    /** @type {DirectoryEntry} */
+    let dir = await new Promise((resolve, reject) => { testDir.getDirectory("readwrite-test", { create: true, exclusive: false }, resolve, reject) });
+    expect(dir.name).toBe(`readwrite-test`);
+    let fileEntry = await new Promise((resolve, reject) => { dir.getFile(filename, {create: true, exclusive: false}, resolve, reject) });
     let writer = await new Promise((resolve, reject) => { fileEntry.createWriter(resolve); });
     let data = new Blob(['some file data'], { type: 'text/plain' });
     await new Promise((resolve, reject) => { writer.onwriteend = resolve; writer.onerror = reject; writer.write(data); });
     let file = await new Promise((resolve, reject) => { fileEntry.file(resolve, reject); });
+    // Tested:readAsText
     let resultText = await new Promise((resolve, reject) => { let reader = new FileReader(); reader.onloadend = function() { resolve(this.result); }; reader.readAsText(file); });
     expect(resultText).toBe('some file data');
   });
 
-  xit("Append a file using alternative methods", async function() {
+  it("Append a file using alternative methods", async function() {
     const filename = "newTempFile-append.txt";
     let fs = await new Promise((resolve, reject) => { window.requestFileSystem(window.TEMPORARY, 5 * 1024 * 1024, (fs) => { resolve(fs); } )});
     let fileEntry = await new Promise((resolve, reject) => { fs.root.getFile(filename, {create: true, exclusive: false}, resolve, reject) });
     let writer = await new Promise((resolve, reject) => { fileEntry.createWriter(resolve); });
     let data = new Blob(['some file data'], { type: 'text/plain' });
+    // Tested:write
     await new Promise((resolve, reject) => { writer.onwriteend = resolve; writer.onerror = reject; writer.write(data); });
     data = new Blob(['extraData'], { type: 'text/plain' });
+    // Tested:write
     await new Promise((resolve, reject) => { writer.onwriteend = resolve; writer.onerror = reject; writer.seek(writer.length); writer.write(data); });
     let file = await new Promise((resolve, reject) => { fileEntry.file(resolve, reject); });
     let resultText = await new Promise((resolve, reject) => { let reader = new FileReader(); reader.onloadend = function() { resolve(this.result); }; reader.readAsText(file); });
@@ -73,10 +77,14 @@ describe("Simple", function() {
   it("Directories and moving", async function() {
     const filename = "newTempFile-append.txt";
     await writeFile(`file.txt`, "contents");
+    /** @type {DirectoryEntry} */
+    // Tested:getDirectory:create
     let dir = await new Promise((resolve, reject) => { testDir.getDirectory("moveDir", { create: true, exclusive: false }, resolve, reject) });
 
-    // Tested:moveTo
+    // Tested:getFile
+    /** @type {FileEntry} */
     let fileEntry = await new Promise((resolve, reject) => { testDir.getFile(`file.txt`, {}, resolve, reject) });
+    // Tested:moveTo
     await new Promise((resolve, reject) => { fileEntry.moveTo(dir, "filerenamed.txt", resolve, reject) });
 
     // Tested:copyTo
@@ -94,22 +102,46 @@ describe("Simple", function() {
     expect(entries.map(o => o.name).indexOf("filerenamed-copied.txt")).toBeGreaterThan(-1);
     expect(entries.map(o => o.name).indexOf("filerenamed.txt")).toBeGreaterThan(-1);
     expect(entries.map(o => o.name).indexOf("file.txt")).toBe(-1);
+
+    // Copy a file
+    fileEntry = await new Promise((resolve, reject) => { dir.getFile(`filerenamed-copied.txt`, {}, resolve, reject) });
+    await new Promise((resolve, reject) => { fileEntry.copyTo(dir, "filerenamed-copied-todelete.txt", resolve, reject) });
+
+    // Tested:remove
+    fileEntry = await new Promise((resolve, reject) => { dir.getFile(`filerenamed-copied-todelete.txt`, {}, resolve, reject) });
+    await new Promise((resolve, reject) => { fileEntry.remove(resolve, reject) });
+
+    // Tested:removeRecursivly
+    await new Promise((resolve, reject) => { dir.removeRecursively(resolve, reject); });
   });
 
+  
+  it("Handle Errors", async function() {
+    const filename = "newTempFile-append.txt";
+    /** @type {DirectoryEntry} */
+    let dir = await new Promise((resolve, reject) => { testDir.getDirectory("a-dir", { create: true, exclusive: false }, resolve, reject) });
+    await writeFile(`a-dir/file.txt`, "contents");
+    await writeFile(`a-dir/file2.txt`, "contents");
 
-// getDirectory: getDirectoryHandler,
-// removeRecursively: removeRecursively,
-// getFile: getFileHandler,
+    // Test delete on folder not empty, should error.
+
+    /** @type {FileEntry} */
+    let exception;
+    try {
+      await new Promise((resolve, reject) => { dir.remove(resolve, reject) });
+    } catch (e) {
+      exception = e;
+    }
+
+    expect(exception.code.message).toContain("ERR_FS_EISDIR");
+  });
+
 // getFileMetadata: getFileMetadata,
 // setMetadata: setMetadata,
-// remove: removeHandler,
 // getParent: getParentHandler,
 // readAsDataURL: readAsDataURLHandler,
 // readAsBinaryString: readAsBinaryStringHandler,
 // readAsArrayBuffer: readAsArrayBufferHandler,
-// readAsText: readAsTextHandler,
-// write: writeHandler,
-// requestFileSystem: requestFileSystemHandler,
 // resolveLocalFileSystemURI: resolveLocalFileSystemURIHandler,
 // // exec's below are not implemented in browser platform
 // truncate: notifyNotSupported,
@@ -128,7 +160,7 @@ const writeFile = async function(filename, contents) {
  * 
  * @param {DirectoryEntry} folderEntry 
  */
-const recursiveRemove = async (folderEntry) => {
+const recursiveRemoveOld = async (folderEntry) => {
 /** @type {Entry[]} */
   let entries = await new Promise((resolve, reject) => { folderEntry.createReader().readEntries(resolve, reject); });
   for (var entry of entries) {
