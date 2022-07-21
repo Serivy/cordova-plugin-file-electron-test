@@ -1,6 +1,6 @@
 var cordovaReady = new Promise((resolve, reject) => { document.addEventListener('deviceready', resolve, false); });
 
-const testDirName = "electron/testDirectory";
+const testDirName = "testDirectory";
 
 /** @type {DirectoryEntry} */
 let testDir;
@@ -12,7 +12,8 @@ describe("Simple", function() {
     // Clean out all files.
     // Tested: requestAllPaths
     // Tested: requestFileSystem
-    let fs = await new Promise((resolve, reject) => { window.requestFileSystem(window.PERSISTENT, 5 * 1024 * 1024, (fs) => { resolve(fs); } )});
+    await new Promise((resolve, reject) => { window.requestFileSystem(window.PERSISTENT, 5 * 1024 * 1024, (fs) => { resolve(fs); } )});
+    let root = await new Promise((resolve, reject) => { window.resolveLocalFileSystemURL(cordova.file.dataDirectory, resolve, reject); });
     // let entries = await new Promise((resolve, reject) => { dir.createReader().readEntries(resolve, reject); });
     // for (var file of entries) {
     //   // if (file.isFile) {
@@ -31,11 +32,14 @@ describe("Simple", function() {
 
     try {
       // Remove existing.
-      testDir = await new Promise((resolve, reject) => { fs.root.getDirectory(testDirName, { create: false, exclusive: false }, resolve, reject) });
-      console.log("Cleaning up old testing directory" + testDir.fullPath);
-      await new Promise((resolve, reject) => { testDir.removeRecursively(resolve, reject); });
+      testDir = await new Promise((resolve, reject) => { root.getDirectory(testDirName, { create: false, exclusive: false }, resolve, reject) });
+    if (testDir) {
+        console.log("Cleaning up old testing directory: " + testDir.fullPath);
+        await new Promise((resolve, reject) => { testDir.removeRecursively(resolve, reject); });
+      }
+    } catch (e) {
     } finally {
-      testDir = await new Promise((resolve, reject) => { fs.root.getDirectory(testDirName, { create: true, exclusive: false }, resolve, reject) });
+      testDir = await new Promise((resolve, reject) => { root.getDirectory(testDirName, { create: true, exclusive: false }, resolve, reject) });
     }
     console.log("Testing dir" + testDir.fullPath);
 
@@ -60,8 +64,7 @@ describe("Simple", function() {
 
   it("Append a file using alternative methods", async function() {
     const filename = "newTempFile-append.txt";
-    let fs = await new Promise((resolve, reject) => { window.requestFileSystem(window.TEMPORARY, 5 * 1024 * 1024, (fs) => { resolve(fs); } )});
-    let fileEntry = await new Promise((resolve, reject) => { fs.root.getFile(filename, {create: true, exclusive: false}, resolve, reject) });
+    let fileEntry = await new Promise((resolve, reject) => { testDir.getFile(filename, {create: true, exclusive: false}, resolve, reject) });
     let writer = await new Promise((resolve, reject) => { fileEntry.createWriter(resolve); });
     let data = new Blob(['some file data'], { type: 'text/plain' });
     // Tested:write
@@ -136,12 +139,75 @@ describe("Simple", function() {
     expect(exception.code.message).toContain("ERR_FS_EISDIR");
   });
 
+  it("readAs", async function() {
+    const filename = "text.txt";
+    /** @type {DirectoryEntry} */
+    let dir = await new Promise((resolve, reject) => { testDir.getDirectory("readAs-test", { create: true, exclusive: false }, resolve, reject) });
+    await writeFile(`readAs-test/text.txt`, "text");
+    let fileEntry = await new Promise((resolve, reject) => { dir.getFile(filename, {create: false, exclusive: false}, resolve, reject) });
+    let file = await new Promise((resolve, reject) => { fileEntry.file(resolve, reject); });
+      
+    // Tested:readAsArrayBuffer
+    let resultBuf = await new Promise((resolve, reject) => { let reader = new FileReader(); reader.onloadend = function() { resolve(this.result); }; reader.readAsArrayBuffer(file); });
+    let uintarray = new Uint8Array(resultBuf);
+    expect(uintarray).toEqual(new Uint8Array([116, 101, 120, 116]));
+
+    // Tested:readAsDataURL
+    let resultData = await new Promise((resolve, reject) => { let reader = new FileReader(); reader.onloadend = function() { resolve(this.result); }; reader.readAsDataURL(file); });
+    expect(resultData).toEqual("data:text/plain;base64,dGV4dA==");
+  });
+
+  it("imageTests", async function() {
+    const filename = "img.png";
+    /** @type {DirectoryEntry} */
+    let dir = await new Promise((resolve, reject) => { testDir.getDirectory("imageTests-test", { create: true, exclusive: false }, resolve, reject) });
+
+    const img = await fetch("img/logo.png");
+    const imgData = await img.blob();
+    const imgDataUri = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = (o) => resolve(reader.result); reader.onerror = (o) => reject(reader.error); reader.onabort = (o) => reject(new Error()); reader.readAsDataURL(imgData); });
+    const imgBufferArray = await imgData.arrayBuffer();
+    const imgBinaryString = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = (o) => resolve(reader.result); reader.onerror = (o) => reject(reader.error); reader.onabort = (o) => reject(new Error()); reader.readAsBinaryString(imgData); });
+    
+    let fileEntry = await new Promise((resolve, reject) => { dir.getFile(filename, {create: true, exclusive: false}, resolve, reject) });
+    let writer = await new Promise((resolve) => { fileEntry.createWriter(resolve); });
+    await new Promise((resolve, reject) => { writer.onwriteend = resolve; writer.onerror = reject; writer.write(imgData); });
+
+    let file = await new Promise((resolve, reject) => { fileEntry.file(resolve, reject); });
+    
+    // Tested:readAsArrayBuffer
+    let resultBuf = await new Promise((resolve, reject) => { let reader = new FileReader(); reader.onloadend = function() { resolve(this.result); }; reader.readAsArrayBuffer(file); });
+    expect(resultBuf).toEqual(imgBufferArray);
+
+    // Tested:readAsDataURL
+    let resultData = await new Promise((resolve) => { let reader = new FileReader(); reader.onloadend = function() { resolve(this.result); }; reader.readAsDataURL(file); });
+    expect(resultData).toEqual(imgDataUri);
+
+    // Tested:readAsBinaryString
+    let resultBinString = await new Promise((resolve) => { let reader = new FileReader(); reader.onloadend = function() { resolve(this.result); }; reader.readAsBinaryString(file); });
+    expect(resultBinString).toEqual(imgBinaryString);
+  });
+
+  it("resolvefilesystems", async function() {
+    // Tested:resolveLocalFileSystemURI
+    let root = await new Promise((resolve, reject) => { window.resolveLocalFileSystemURL(cordova.file.dataDirectory, resolve, reject); });
+    expect(root.isDirectory).toBeTrue();
+
+    let exception;
+    try {
+      root = await new Promise((resolve, reject) => { window.resolveLocalFileSystemURL(cordova.file.externalDataDirectory, resolve, reject); });
+    } catch (e) {
+      exception = e;
+    }
+    expect(exception).not.toBeNull();
+
+    // Try a temp dir
+    let tmp = await new Promise((resolve, reject) => { window.requestFileSystem(window.TEMPORARY, 5 * 1024 * 1024, (fs) => { resolve(fs); } )});
+    expect(tmp.root.name).toBe("Temp");
+    expect(tmp.root.isDirectory).toBeTrue();
+  });
 // getFileMetadata: getFileMetadata,
 // setMetadata: setMetadata,
 // getParent: getParentHandler,
-// readAsDataURL: readAsDataURLHandler,
-// readAsBinaryString: readAsBinaryStringHandler,
-// readAsArrayBuffer: readAsArrayBufferHandler,
 // resolveLocalFileSystemURI: resolveLocalFileSystemURIHandler,
 // // exec's below are not implemented in browser platform
 // truncate: notifyNotSupported,

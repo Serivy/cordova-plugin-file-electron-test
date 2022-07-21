@@ -11,7 +11,7 @@
     "addpluginlink": "npx cordova plugin add ../cordova-plugin-file --link",
     "test": "npx nodemon --watch www --exec \"cordova prepare electron && cordova run electron --nobuild\" --ext html,css,js",
     "clean": "npx rimraf ./plugins && npx rimraf ./platforms",
-    "setup": "npx cordova prepare electron"
+    "setup": "npm run clean && npx cordova prepare electron && npx cordova plugin rm cordova-plugin-file && npx cordova plugin add ../cordova-plugin-file --link"
   },
   "keywords": [
     "ecosystem:cordova"
