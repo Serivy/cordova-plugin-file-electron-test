@@ -1,13 +1,10 @@
+// @ts-check
 var cordovaReady = new Promise((resolve, reject) => { document.addEventListener('deviceready', resolve, false); });
-
-const testDirName = "testDirectory";
-
-/** @type {DirectoryEntry} */
-let testDir;
 
 describe("Simple", function() {
   beforeAll(async function() {
     await cordovaReady;
+    const testDirName = "testDirectory";
 
     // Clean out all files.
     // Tested: requestAllPaths
@@ -22,7 +19,7 @@ describe("Simple", function() {
     //   //   console.log("Cleaned up " + file.fullPath);
     //   // }
 
-    //   if (file.isDirectory && file.name === testDir) {
+    //   if (file.isDirectory && file.name === window.testDir) {
     //     let entry = await new Promise((resolve, reject) => dir.getDirectory(file.name, { create: false, exclusive: false }, resolve, reject));
     //     // https://www.w3.org/TR/2011/WD-file-system-api-20110419/#widl-Entry-remove
     //     await new Promise((resolve, reject) => { entry.remove(resolve, reject); });
@@ -32,16 +29,16 @@ describe("Simple", function() {
 
     try {
       // Remove existing.
-      testDir = await new Promise((resolve, reject) => { root.getDirectory(testDirName, { create: false, exclusive: false }, resolve, reject) });
-    if (testDir) {
-        console.log("Cleaning up old testing directory: " + testDir.fullPath);
-        await new Promise((resolve, reject) => { testDir.removeRecursively(resolve, reject); });
+      let existingtestDir = await new Promise((resolve, reject) => { root.getDirectory(testDirName, { create: false, exclusive: false }, resolve, reject) });
+    if (existingtestDir) {
+        console.log("Cleaning up old testing directory: " + existingtestDir.fullPath);
+        await new Promise((resolve, reject) => { existingtestDir.removeRecursively(resolve, reject); });
       }
     } catch (e) {
     } finally {
-      testDir = await new Promise((resolve, reject) => { root.getDirectory(testDirName, { create: true, exclusive: false }, resolve, reject) });
+      window.testDir = await new Promise((resolve, reject) => { root.getDirectory(testDirName, { create: true, exclusive: false }, resolve, reject) });
     }
-    console.log("Testing dir" + testDir.fullPath);
+    console.log("Testing dir" + window.testDir.fullPath);
 
     // await new Promise((resolve, reject) => { setTimeout(resolve, 3000); });
   });
@@ -50,7 +47,7 @@ describe("Simple", function() {
   it("write and read newTempFile.txt in app data", async function() {
     const filename = "newTempFile.txt";
     /** @type {DirectoryEntry} */
-    let dir = await new Promise((resolve, reject) => { testDir.getDirectory("readwrite-test", { create: true, exclusive: false }, resolve, reject) });
+    let dir = await new Promise((resolve, reject) => { window.testDir.getDirectory("readwrite-test", { create: true, exclusive: false }, resolve, reject) });
     expect(dir.name).toBe(`readwrite-test`);
     let fileEntry = await new Promise((resolve, reject) => { dir.getFile(filename, {create: true, exclusive: false}, resolve, reject) });
     let writer = await new Promise((resolve, reject) => { fileEntry.createWriter(resolve); });
@@ -64,7 +61,7 @@ describe("Simple", function() {
 
   it("Append a file using alternative methods", async function() {
     const filename = "newTempFile-append.txt";
-    let fileEntry = await new Promise((resolve, reject) => { testDir.getFile(filename, {create: true, exclusive: false}, resolve, reject) });
+    let fileEntry = await new Promise((resolve, reject) => { window.testDir.getFile(filename, {create: true, exclusive: false}, resolve, reject) });
     let writer = await new Promise((resolve, reject) => { fileEntry.createWriter(resolve); });
     let data = new Blob(['some file data'], { type: 'text/plain' });
     // Tested:write
@@ -82,11 +79,11 @@ describe("Simple", function() {
     await writeFile(`file.txt`, "contents");
     /** @type {DirectoryEntry} */
     // Tested:getDirectory:create
-    let dir = await new Promise((resolve, reject) => { testDir.getDirectory("moveDir", { create: true, exclusive: false }, resolve, reject) });
+    let dir = await new Promise((resolve, reject) => { window.testDir.getDirectory("moveDir", { create: true, exclusive: false }, resolve, reject) });
 
     // Tested:getFile
     /** @type {FileEntry} */
-    let fileEntry = await new Promise((resolve, reject) => { testDir.getFile(`file.txt`, {}, resolve, reject) });
+    let fileEntry = await new Promise((resolve, reject) => { window.testDir.getFile(`file.txt`, {}, resolve, reject) });
     // Tested:moveTo
     await new Promise((resolve, reject) => { fileEntry.moveTo(dir, "filerenamed.txt", resolve, reject) });
 
@@ -96,6 +93,9 @@ describe("Simple", function() {
 
     fileEntry = await new Promise((resolve, reject) => { dir.getFile(`filerenamed-copied.txt`, {}, resolve, reject) });
     let file = await new Promise((resolve, reject) => { fileEntry.file(resolve, reject); });
+    expect(fileEntry.name).toBe("filerenamed-copied.txt")
+    expect(file.name).toBe(fileEntry.name);
+
     let resultText = await new Promise((resolve, reject) => { let reader = new FileReader(); reader.onloadend = function() { resolve(this.result); }; reader.readAsText(file); });
     expect(resultText).toBe('contents');
 
@@ -112,37 +112,39 @@ describe("Simple", function() {
 
     // Tested:remove
     fileEntry = await new Promise((resolve, reject) => { dir.getFile(`filerenamed-copied-todelete.txt`, {}, resolve, reject) });
-    await new Promise((resolve, reject) => { fileEntry.remove(resolve, reject) });
+
+    await new Promise((/** @type {(value: void) => void} */resolve , reject) => { fileEntry.remove(resolve, reject) });
 
     // Tested:removeRecursivly
-    await new Promise((resolve, reject) => { dir.removeRecursively(resolve, reject); });
+    await new Promise((/** @type {(value: void) => void} */resolve, reject) => { dir.removeRecursively(resolve, reject); });
   });
 
   
   it("Handle Errors", async function() {
     const filename = "newTempFile-append.txt";
     /** @type {DirectoryEntry} */
-    let dir = await new Promise((resolve, reject) => { testDir.getDirectory("a-dir", { create: true, exclusive: false }, resolve, reject) });
+    let dir = await new Promise((resolve, reject) => { window.testDir.getDirectory("a-dir", { create: true, exclusive: false }, resolve, reject) });
     await writeFile(`a-dir/file.txt`, "contents");
     await writeFile(`a-dir/file2.txt`, "contents");
 
     // Test delete on folder not empty, should error.
 
-    /** @type {FileEntry} */
     let exception;
     try {
-      await new Promise((resolve, reject) => { dir.remove(resolve, reject) });
+      await DirectoryEntryRemove(dir);
+      
+      await new Promise((/** @type {(value: void) => void} */resolve, reject) => { dir.remove(resolve, reject) });
     } catch (e) {
       exception = e;
     }
 
-    expect(exception.code.message).toContain("ERR_FS_EISDIR");
+    expect(exception.code.message).toContain("ENOTEMPTY");
   });
 
   it("readAs", async function() {
     const filename = "text.txt";
     /** @type {DirectoryEntry} */
-    let dir = await new Promise((resolve, reject) => { testDir.getDirectory("readAs-test", { create: true, exclusive: false }, resolve, reject) });
+    let dir = await new Promise((resolve, reject) => { window.testDir.getDirectory("readAs-test", { create: true, exclusive: false }, resolve, reject) });
     await writeFile(`readAs-test/text.txt`, "text");
     let fileEntry = await new Promise((resolve, reject) => { dir.getFile(filename, {create: false, exclusive: false}, resolve, reject) });
     let file = await new Promise((resolve, reject) => { fileEntry.file(resolve, reject); });
@@ -153,14 +155,15 @@ describe("Simple", function() {
     expect(uintarray).toEqual(new Uint8Array([116, 101, 120, 116]));
 
     // Tested:readAsDataURL
-    let resultData = await new Promise((resolve, reject) => { let reader = new FileReader(); reader.onloadend = function() { resolve(this.result); }; reader.readAsDataURL(file); });
+    // let resultData = await new Promise((resolve, reject) => { let reader = new FileReader(); reader.onloadend = function() { resolve(this.result); }; reader.readAsDataURL(file); });
+    let resultData = await readAsPromise(dir, filename, {create: false, exclusive: false}, "readAsDataURL");
     expect(resultData).toEqual("data:text/plain;base64,dGV4dA==");
   });
 
   it("imageTests", async function() {
     const filename = "img.png";
     /** @type {DirectoryEntry} */
-    let dir = await new Promise((resolve, reject) => { testDir.getDirectory("imageTests-test", { create: true, exclusive: false }, resolve, reject) });
+    let dir = await new Promise((resolve, reject) => { window.testDir.getDirectory("imageTests-test", { create: true, exclusive: false }, resolve, reject) });
 
     const img = await fetch("img/logo.png");
     const imgData = await img.blob();
@@ -205,18 +208,48 @@ describe("Simple", function() {
     expect(tmp.root.name).toBe("Temp");
     expect(tmp.root.isDirectory).toBeTrue();
   });
+
+  /** Test: truncate */
+  it("truncate", async function() {
+    /** @type {DirectoryEntry} */
+    let dir = await new Promise((resolve, reject) => { window.testDir.getDirectory("truncate-test", { create: true, exclusive: false }, resolve, reject) });
+    
+    await writeFile(`truncate-test/file-to-truncate.txt`, "a file with contents in it.");
+    let result = await readAsPromise(dir, "file-to-truncate.txt");
+    expect(result).toBe("a file with contents in it.");
+
+    let fileEntry = await new Promise((resolve, reject) => { dir.getFile("file-to-truncate.txt", { create: false, exclusive: false }, resolve, reject) });
+    let writer = await new Promise((resolve, reject) => { fileEntry.createWriter(resolve); });
+
+    // Truncate 0 at the start
+    await new Promise((resolve, reject) => { writer.onwriteend = resolve; writer.onerror = reject; writer.seek(0); writer.truncate(0); });
+    
+    result = await readAsPromise(dir, "file-to-truncate.txt");
+    expect(result).toBe("");
+
+    // Truncate 
+    await writeFile(`truncate-test/file-to-truncate.txt`, "a file with contents in it.");
+    await new Promise((resolve, reject) => { writer.onwriteend = resolve; writer.onerror = reject; writer.truncate(11); });
+    result = await readAsPromise(dir, "file-to-truncate.txt");
+    expect(result).toBe("a file with");
+  });
+
 // getFileMetadata: getFileMetadata,
 // setMetadata: setMetadata,
 // getParent: getParentHandler,
 // resolveLocalFileSystemURI: resolveLocalFileSystemURIHandler,
-// // exec's below are not implemented in browser platform
-// truncate: notifyNotSupported,
 // requestAllFileSystems: notifyNotSupported,
-// // method below is used for backward compatibility w/ old File plugin implementation
 // _getLocalFilesystemPath: _getLocalFilesystemPathHandler
 
+/** Helper functions combining multiple calls into promises. */
+
+/**
+ * 
+ * @param {string} filename 
+ * @param {string} contents 
+ */
 const writeFile = async function(filename, contents) {
-  let fileEntry = await new Promise((resolve, reject) => { testDir.getFile(filename, {create: true, exclusive: false}, resolve, reject) });
+  let fileEntry = await new Promise((resolve, reject) => { window.testDir.getFile(filename, {create: true, exclusive: false}, resolve, reject) });
   let writer = await new Promise((resolve, reject) => { fileEntry.createWriter(resolve); });
   let data = new Blob([contents], { type: 'text/plain' });
   await new Promise((resolve, reject) => { writer.onwriteend = resolve; writer.onerror = reject; writer.write(data); });
@@ -224,19 +257,67 @@ const writeFile = async function(filename, contents) {
 
 /**
  * 
- * @param {DirectoryEntry} folderEntry 
+ * @param {DirectoryEntry} dir 
+ * @param {string} fileName 
+ * @param {{ create?: boolean, exclusive?: boolean }} [flags]
+ * @param {"readAsText" | "readAsDataURL"?} [operation ]
+ * @returns 
  */
-const recursiveRemoveOld = async (folderEntry) => {
-/** @type {Entry[]} */
-  let entries = await new Promise((resolve, reject) => { folderEntry.createReader().readEntries(resolve, reject); });
-  for (var entry of entries) {
-    if (entry.isDirectory) {
-      await recursiveRemove(entry);
-    }
-    await new Promise((resolve, reject) => { entry.remove(resolve, reject); });
-    // await new Promise((resolve, reject) => { setTimeout(resolve, 1000); })
-  }
+const readAsPromise = async function(dir, fileName, flags, operation) {
+  operation = operation || "readAsText"
+  var fileEntry = await DirectoryEntryGetFile(dir, fileName, flags);
+  let file = await new Promise((resolve, reject) => { fileEntry.file(resolve, reject); });
+  let result = await new Promise((resolve) => { let reader = new FileReader(); reader.onloadend = function() { resolve(this.result); }; reader[operation](file); });
+  return result;
 }
+
+/***************** Promise versions of the calls. ************************/
+
+/**
+ * 
+ * @param {DirectoryEntry} dir 
+ * @param {string} fileName 
+ * @param {{ create?: boolean }} flags 
+ * @returns {Promise<FileEntry>}
+ */
+const DirectoryEntryGetFile = async function(dir, fileName, flags) {
+  flags = flags || {};
+  return await new Promise((resolve, reject) => { dir.getFile(fileName, flags, resolve, reject) });
+}
+
+/**
+ * 
+ * @param {DirectoryEntry} directoryEntry 
+ * @returns {Promise<void>}
+ */
+const DirectoryEntryRemove = async (directoryEntry) => {
+  return await new Promise((resolve, reject) => { directoryEntry.remove(resolve, reject) });
+}
+
+// DirectoryEntry.defineProperty(Array.prototype, "remove", {
+//   set: function(){},
+//   get: function(){
+//     return removeArrayElement.bind(this);
+//   }
+// });
+
+// /**
+//  * 
+//  * @param {DirectoryEntry} folderEntry 
+//  */
+// const recursiveRemoveOld = async (folderEntry) => {
+// /** @type {Entry[]} */
+//   let entries = await new Promise((resolve, reject) => { folderEntry.createReader().readEntries(resolve, reject); });
+//   for (var entry of entries) {
+//     if (entry.isDirectory) {
+//       await recursiveRemove(entry);
+//     }
+//     await new Promise((resolve, reject) => { entry.remove(resolve, reject); });
+//     // await new Promise((resolve, reject) => { setTimeout(resolve, 1000); })
+//   }
+// }
+
+
 /***********************************************************************
 // For extra logging, open cdv-electron-preload.js
 contextBridge.exposeInMainWorld('_cdvElectronIpc', {
