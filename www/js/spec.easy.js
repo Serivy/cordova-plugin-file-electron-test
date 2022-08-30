@@ -234,6 +234,17 @@ describe("Simple", function() {
     expect(result).toBe("a file with");
   });
 
+  /** Test: remove allowd t */
+  it("remove doesnt exist", async function() {
+    /** @type {DirectoryEntry} */
+    let dir = await new Promise((resolve, reject) => { window.testDir.getDirectory("remove-test", { create: true, exclusive: false }, resolve, reject) });
+    
+    let fileEntry = await new Promise((resolve, reject) => { dir.getFile("doesntexists.txt", {create: false, exclusive: false}, resolve, reject) });
+    console.log(fileEntry);
+    expect(fileEntry).not.toBeNull();
+    let file = await new Promise((/** @type {(value: void) => void} */resolve , reject) => { fileEntry.remove(resolve, reject) });
+    expect(file).toBe(undefined);
+  });
 // getFileMetadata: getFileMetadata,
 // setMetadata: setMetadata,
 // getParent: getParentHandler,
