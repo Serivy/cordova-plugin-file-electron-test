@@ -6,12 +6,12 @@
   "main": "index.js",
   "scripts": {
     "start2": "cordova run electron --nobuild",
-    "start": "npx nodemon --watch plugins/cordova-plugin-file --watch www --exec \"cordova run electron --nobuild\" --ext js",
+    "start": "npx nodemon --watch plugins/cordova-plugin-file --watch www --exec \"npx cordova run electron --nobuild\" --ext js",
     "uninstall": "npx cordova plugin remove ../cordova-plugin-file",
     "addpluginlink": "npx cordova plugin add ../cordova-plugin-file --link",
-    "test": "npx nodemon --watch www --exec \"cordova prepare electron && cordova run electron --nobuild\" --ext html,css,js",
+    "test": "npx nodemon --watch www --exec \"npx cordova prepare electron && npx cordova run electron --nobuild\" --ext html,css,js",
     "clean": "npx rimraf ./plugins && npx rimraf ./platforms",
-    "setup": "npm run clean && npx cordova prepare electron && npx cordova plugin rm cordova-plugin-file && npx cordova plugin add ../cordova-plugin-file --link"
+    "setup": "npm run clean && npx cordova prepare electron && npx cordova plugin remove cordova-plugin-file && npx cordova plugin add ../cordova-plugin-file-electron --link"
   },
   "keywords": [
     "ecosystem:cordova"
@@ -19,14 +19,14 @@
   "author": "Apache Cordova Team",
   "license": "Apache-2.0",
   "dependencies": {
-    "cordova": "^11.0.0",
-    "rimraf": "^3.0.2"
+    "cordova": "^12.0.0",
+    "rimraf": "^6.0.1"
   },
   "devDependencies": {
     "cordova-browser": "^6.0.0",
-    "cordova-electron": "^3.1.0",
-    "cordova-plugin-file": "file:../cordova-plugin-file",
-    "nodemon": "^2.0.18"
+    "cordova-electron": "^4.0.0",
+    "cordova-plugin-file": "file:../cordova-plugin-file-electron",
+    "nodemon": "^3.1.4"
   },
   "cordova": {
     "platforms": [
@@ -36,5 +36,6 @@
     "plugins": {
       "cordova-plugin-file": {}
     }
-  }
+  },
+  "packageManager": "pnpm@9.3.0+sha512.ee7b93e0c2bd11409c6424f92b866f31d3ea1bef5fbe47d3c7500cdc3c9668833d2e55681ad66df5b640c61fa9dc25d546efa54d76d7f8bf54b13614ac293631"
 }
